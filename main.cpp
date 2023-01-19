@@ -21,62 +21,6 @@ static std::unique_ptr<Module> TheModule;
 static std::unique_ptr<IRBuilder<>> Builder;
 static std::map<std::string, Value*> NamedValues;
 
-class ExprNode {
-public:
-  virtual ~ExprNode() = default;
-  virtual Value *codegen() = 0;
-};
-
-class NumberExprNode {
-  int Val;
-public:
-  NumberExprNode(int Val) : Val(Val) {}
-  Value *codegen() {
-    return ConstantInt::getSigned(Type::getInt32Ty(*TheContext), Val);
-  }
-};
-
-class BinaryExprNode : ExprNode {
-  char Op;
-  std::unique_ptr<ExprNode> LHS, RHS;
-
-public:
-  BinaryExprNode(char Op, std::unique_ptr<ExprNode> LHS,
-                          std::unique_ptr<ExprNode> RHS)
-    : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
-  Value *codegen() {
-    Value *L = LHS->codegen();
-    Value *R = RHS->codegen();
-    if (!L || !R) return nullptr;
-
-    switch (Op) {
-      case '+': return Builder->CreateAdd(L, R);
-      case '-': return Builder->CreateSub(L, R);
-      case '*': return Builder->CreateMul(L, R);
-    };
-    return nullptr;
-  }
-};
-
-class Statement {
-  std::string type;
-public:
-};
-
-class OberonModule {
-  std::string name;
-  Statement stmt;
-  // TODO:
-  // submodules
-  // userTypes
-  // constants
-  // variables
-  // procedures
-public:
-  OberonModule(std::string const& name, Statement const& stmt)
-    :name(name), stmt(stmt) {}
-};
-
 static void InitializeModule() {
   std::cout << "Initializing Module..." << std::endl;
 
@@ -84,7 +28,6 @@ static void InitializeModule() {
   TheModule = std::make_unique<Module>("Oberon is Cool B)", *TheContext);
   Builder = std::make_unique<IRBuilder<>>(*TheContext);
 }
-
 
 Value* GenExpression(json exp) {
   auto const& type = exp["type"];
@@ -110,6 +53,7 @@ Value* GenExpression(json exp) {
     return Builder->CreateSub(L, R, "diferenca");
   }
   std::cout << "Expression type not implemented!!!" << std::endl;
+  exit(1);
   return nullptr;
 }
 
