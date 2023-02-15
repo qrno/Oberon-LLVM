@@ -37,7 +37,7 @@ Value* GenExpression(json exp) {
   } else if (type == "VarExpression") {
     auto const& name = exp["name"];
     if (NamedValues.find(name) == NamedValues.end())
-      std::cout << "Didn't find " << name << std::endl;
+      std::cout << "Didn't find named value " << name << std::endl;
     return NamedValues[name];
   } else if (type == "MultExpression") {
     auto L = GenExpression(exp["left"]);
@@ -54,7 +54,7 @@ Value* GenExpression(json exp) {
   }else if (type =="OrExpression"){
     auto L = GenExpression(exp["left"]);
     auto R = GenExpression(exp["right"]);
-    return Builder->CreateLogicalOr(L, R, "OR");  
+    return Builder->CreateLogicalOr(L, R, "OR");
   }else if(type=="AndExpression"){
     auto L = GenExpression(exp["left"]);
     auto R = GenExpression(exp["right"]);
@@ -90,7 +90,9 @@ Value* GenExpression(json exp) {
   return nullptr;
 }
 
-void createIfElse(json exp){
+void generate_statement(json statement);
+
+void create_IfElse(json statement){
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
   BasicBlock *ThenBB = BasicBlock::Create(*TheContext, "entao", TheFunction);
@@ -98,77 +100,97 @@ void createIfElse(json exp){
   TheFunction->getBasicBlockList().insert(TheFunction->end(), ThenBB);
   TheFunction->getBasicBlockList().insert(TheFunction->end(), ElseBB);
 
-  auto CondV = GenExpression(exp["condition"]);
+  auto CondV = GenExpression(statement["condition"]);
   Builder->CreateCondBr(CondV, ThenBB, ElseBB);
 
-  // TODO: assumindo que e um returnstmt
-  /* auto Then = GenExpression(exp["thenStmt"]); */
   Builder->SetInsertPoint(ThenBB);
-  auto return_expression = exp["thenStmt"]["exp"];
-  Value* Ret = GenExpression(return_expression);
-  Builder->CreateRet(Ret);
+  generate_statement(statement["thenStmt"]);
 
-  // TODO: assumindo que e um returnstmt
-  /* auto Else = GenExpression(exp["elseStmt"]); */
-  /* Value *ElseV = Else; */
   Builder->SetInsertPoint(ElseBB);
-  return_expression = exp["elseStmt"]["exp"];
-  Ret = GenExpression(return_expression);
+  generate_statement(statement["elseStmt"]);
+}
+
+void create_ReturnStmt(json statement) {
+  auto return_expression = statement["exp"];
+  auto Ret = GenExpression(return_expression);
   Builder->CreateRet(Ret);
+}
+
+void generate_statement(json statement) {
+  auto type = statement["type"];
+  std::cout << "Should generate statement of type " << type << std::endl;
+  if (type == "IfElseStmt") {
+    create_IfElse(statement);
+  } else if (type == "ReturnStmt") {
+    create_ReturnStmt(statement);
+  } else if (type == "SequenceStmt") {
+    for (auto const& st : statement["stmts"])
+      generate_statement(st);
+  } else if (type == "AssignmentStmt") {
+  } else {
+    std::cout << "Statement of type " << type << " not implemented" << std::endl;
+  }
 }
 
 Type* str_to_llvm_type(std::string const& type) {
   if (type == "IntegerType$")
     return Type::getInt32Ty(*TheContext);
-  std::cout << "Type not implemented" << std::endl;
+  std::cout << "Type not implemented " << type << std::endl;
   return nullptr;
+}
+
+void generate_procedure(json procedure) {
+  std::cout << "Generating procedure " << procedure["name"] << std::endl;
+
+  Type *return_type = str_to_llvm_type(procedure["returnType"]["type"]);
+  std::vector<Type*> arg_types;
+  for (auto const& arg : procedure["args"])
+    arg_types.push_back(str_to_llvm_type(arg["argumentType"]["type"]));
+  FunctionType *FT = FunctionType::get(return_type, arg_types, false);
+  Function *F = Function::Create(FT, Function::ExternalLinkage, (std::string)procedure["name"], TheModule.get());
+
+  std::vector<std::string> arg_names;
+  for (auto const& arg : procedure["args"])
+    arg_names.push_back(arg["name"]);
+
+  int idx = 0;
+  for (auto &Arg : F->args())
+    Arg.setName(arg_names[idx++]);
+
+  NamedValues.clear();
+  for (auto &Arg : F->args())
+    NamedValues[(std::string)Arg.getName()] = &Arg;
+
+  BasicBlock *BB = BasicBlock::Create(*TheContext, "entry", F);
+  Builder->SetInsertPoint(BB);
+
+  auto function_stmt = procedure["stmt"];
+  generate_statement(function_stmt);
+
+  if (procedure["name"] == "main") {
+    auto zero = ConstantInt::getSigned(Type::getInt32Ty(*TheContext), 0);
+    Builder->CreateRet(zero);
+  }
+
+  verifyFunction(*F);
+  F->print(errs());
 }
 
 int main() {
   InitializeModule();
 
-  std::ifstream f{"ifelse.json"};
+  std::ifstream f{"mixOfAll.json"};
   json data = json::parse(f);
 
-  int counter=0;
-  for (auto const& procedure : data["procedures"]) {
+  auto const& procedures = data["procedures"];
+  for (auto const& procedure : procedures)
+    generate_procedure(procedure);
 
-    std::cout<<counter++<<std::endl;
-    Type *RT = str_to_llvm_type(procedure["returnType"]["type"]);
-    std::vector<Type*> ARG_TYPES;
-    for (auto const& arg : procedure["args"])
-      ARG_TYPES.push_back(str_to_llvm_type(arg["argumentType"]["type"]));
-    FunctionType *FT = FunctionType::get(RT, ARG_TYPES, false);
-    Function *F = Function::Create(FT, Function::ExternalLinkage, (std::string)procedure["name"], TheModule.get());
-
-    std::vector<std::string> arg_names;
-    for (auto const& arg : procedure["args"])
-      arg_names.push_back(arg["name"]);
-
-    int idx = 0;
-    for (auto &Arg : F->args())
-      Arg.setName(arg_names[idx++]);
-    NamedValues.clear();
-    for (auto &Arg : F->args())
-      NamedValues[(std::string)Arg.getName()] = &Arg;
-
-    BasicBlock *BB = BasicBlock::Create(*TheContext, "entry", F);
-    Builder->SetInsertPoint(BB);
-
-    // NOTE:
-    //  Se quiser talvez descomentar pra funcionar as coisas antigas
-
-    // auto const& return_expression = procedure["stmt"]["exp"];
-    // Value* Ret = GenExpression(return_expression);
-    // Builder->CreateRet(Ret);
-
-    auto if_else = procedure["stmt"];
-    std::cout << "Creating if else" << std::endl;
-    createIfElse(if_else);
-
-    verifyFunction(*F);
-    F->print(errs());
-  }
+  json main_function;
+  main_function["stmt"] = data["stmt"];
+  main_function["name"] = "main";
+  main_function["returnType"]["type"] = "IntegerType$";
+  generate_procedure(main_function);
 
   TheModule->print(errs(), nullptr);
 }

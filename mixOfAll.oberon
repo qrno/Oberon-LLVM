@@ -1,0 +1,32 @@
+
+MODULE SimpleModule;
+  
+VAR
+  x : INTEGER;
+
+    PROCEDURE func(a:INTEGER) : INTEGER;
+      BEGIN
+      
+        IF (a < 15) THEN
+            x:= a+1;
+            REPEAT 
+                x:=x+1
+            UNTIL x>=(a+10);
+            RETURN x
+
+        ELSE
+            x:=a+(-1);
+            REPEAT 
+                x:=x+(-1)
+            UNTIL x<=(a+(-10));
+            RETURN x
+        END
+
+    END func
+
+BEGIN
+ readInt(y);
+ write(func(y))
+END
+
+END SimpleModule.
