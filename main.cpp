@@ -111,8 +111,8 @@ void generate_statement(json statement);
 void create_IfElse(json statement){
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
-  BasicBlock *ThenBB = BasicBlock::Create(*TheContext, "entao", TheFunction);
-  BasicBlock *ElseBB = BasicBlock::Create(*TheContext, "senao");
+  BasicBlock *ThenBB = BasicBlock::Create(*TheContext, "entao_IffElse", TheFunction);
+  BasicBlock *ElseBB = BasicBlock::Create(*TheContext, "senao_IfElse");
   TheFunction->getBasicBlockList().insert(TheFunction->end(), ThenBB);
   TheFunction->getBasicBlockList().insert(TheFunction->end(), ElseBB);
 
@@ -130,6 +130,48 @@ void create_Return(json statement) {
   auto return_expression = statement["exp"];
   auto Ret = generate_expression(return_expression);
   Builder->CreateRet(Ret);
+}
+
+
+void create_IfElseIf(json statement){
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+  BasicBlock *ThenBB = BasicBlock::Create(*TheContext, "entao_IfElseIF", TheFunction);
+  BasicBlock *ElseBB = BasicBlock::Create(*TheContext, "entao_IfElseIF");
+  TheFunction->getBasicBlockList().insert(TheFunction->end(), ThenBB);
+  TheFunction->getBasicBlockList().insert(TheFunction->end(), ElseBB);
+
+  auto CondV = generate_expression(statement["condition"]);
+  Builder->CreateCondBr(CondV, ThenBB, ElseBB);
+
+  Builder->SetInsertPoint(ThenBB);
+  generate_statement(statement["thenStmt"]);
+
+
+  Builder->SetInsertPoint(ElseBB);
+  auto const& elsifs = statement["elseifStmt"];
+  for (auto const& elsif : elsifs){
+    generate_statement(elsif);
+  }
+
+  generate_statement(statement["elseStmt"]);
+}
+
+void create_ElseIf(json statement){
+  Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+  BasicBlock *ThenBB = BasicBlock::Create(*TheContext, "entao_ElseIf", TheFunction);
+  BasicBlock *ElseBB = BasicBlock::Create(*TheContext, "senao_ElseIf");
+  TheFunction->getBasicBlockList().insert(TheFunction->end(), ThenBB);
+  TheFunction->getBasicBlockList().insert(TheFunction->end(), ElseBB);
+
+  auto CondV = generate_expression(statement["condition"]);
+  Builder->CreateCondBr(CondV, ThenBB, ElseBB);
+
+  Builder->SetInsertPoint(ThenBB);
+  generate_statement(statement["thenStmt"]);
+  std::cout<<"Them Stmt: "<<statement["thenStmt"]<<"\n";
+  Builder->SetInsertPoint(ElseBB);
 }
 
 void create_Write(json statement) {
@@ -158,7 +200,13 @@ void generate_statement(json statement) {
   std::cout << "Should generate statement of type " << type << std::endl;
   if (type == "IfElseStmt") {
     create_IfElse(statement);
-  } else if (type == "ReturnStmt") {
+  } else if (type=="IfElseIfStmt"){
+    create_IfElseIf(statement);
+  }else if (type=="ElseIfStmt"){
+    create_ElseIf(statement);
+  }else if (type=="ForStmt"){
+    // for
+  }else if (type == "ReturnStmt") {
     create_Return(statement);
   } else if (type == "SequenceStmt") {
     for (auto const& st : statement["stmts"])
@@ -226,7 +274,7 @@ int main() {
   InitializeModule();
   declare_write_integer();
 
-  std::ifstream f{"mixOfAll.json"};
+  std::ifstream f{"IfElseIf.json"};
   json data = json::parse(f);
 
   auto const& procedures = data["procedures"];

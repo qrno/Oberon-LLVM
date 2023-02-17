@@ -1,0 +1,12 @@
+MODULE SimpleModule;	
+
+VAR	
+  x: INTEGER;	
+
+BEGIN
+    FOR x := 0 TO x < 10 DO
+        write(x)
+    END
+END
+
+END SimpleModule.
