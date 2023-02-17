@@ -22,7 +22,7 @@ using json = nlohmann::json;
 static std::unique_ptr<LLVMContext> TheContext;
 static std::unique_ptr<Module> TheModule;
 static std::unique_ptr<IRBuilder<>> Builder;
-static std::map<std::string, AllocaInst*> GlobalVars, NamedValues;
+static std::map<std::string, AllocaInst*> NamedValues;
 
 static void InitializeModule() {
   std::cout << "Initializing Module..." << std::endl;
@@ -90,10 +90,7 @@ Value* generate_expression(json exp) {
     for (auto const& arg : exp["args"])
       args.push_back(generate_expression(arg));
     std::cout << "Will now call CreateCall" << std::endl;
-    // TODO: Fix this
     return Builder->CreateCall(TheModule->getFunction((std::string)exp["name"]), args);
-    /* std::cout << "Returning 0" << std::endl; */
-    /* return ConstantInt::getSigned(Type::getInt32Ty(*TheContext), 0); */
   }
 
   std::cout << "Expression type not implemented!!!" << std::endl;
@@ -196,6 +193,25 @@ void create_Read(json statement) {
   Builder->CreateStore(value_read, alloca);
 }
 
+void create_For(json statement) {
+  Function *F = Builder->GetInsertBlock()->getParent();
+  generate_statement(statement["init"]);
+  BasicBlock *LoopBB = BasicBlock::Create(*TheContext, "loop", F);
+
+  Builder->CreateBr(LoopBB);
+  Builder->SetInsertPoint(LoopBB);
+
+  generate_statement(statement["stmt"]);
+
+  Value* Cond = generate_expression(statement["condition"]);
+
+  BasicBlock *AfterBB = BasicBlock::Create(*TheContext, "afterloop", F);
+  Builder->CreateCondBr(Cond, LoopBB, AfterBB);
+
+  Builder->SetInsertPoint(AfterBB);
+}
+
+
 void generate_statement(json statement) {
   auto type = statement["type"];
   std::cout << "Should generate statement of type " << type << std::endl;
@@ -206,7 +222,7 @@ void generate_statement(json statement) {
   }else if (type=="ElseIfStmt"){
     create_ElseIf(statement);
   }else if (type=="ForStmt"){
-    // for
+    create_For(statement);
   }else if (type == "ReturnStmt") {
     create_Return(statement);
   } else if (type == "SequenceStmt") {
@@ -221,6 +237,12 @@ void generate_statement(json statement) {
     auto exp = generate_expression(statement["exp"]);
     auto alloca = NamedValues[varName];
     Builder->CreateStore(exp, alloca);
+  } else if (type == "ProcedureCallStmt") {
+    std::vector<Value*> args;
+    for (auto const& arg : statement["args"])
+      args.push_back(generate_expression(arg));
+    std::cout << "Will now call CreateCall" << std::endl;
+    Builder->CreateCall(TheModule->getFunction((std::string)statement["name"]), args);
   } else {
     std::cout << "Statement of type " << type << " not implemented" << std::endl;
   }
@@ -308,8 +330,13 @@ int main() {
   declare_write_integer();
   declare_read_integer();
 
-  std::ifstream f{"read.json"};
+  std::ifstream f{"for.json"};
   json data = json::parse(f);
+
+  // TODO: Global variables
+  /* auto const& variables = data["variables"]; */
+  /* for (auto const& variable : variables) { */
+  /* } */
 
   auto const& procedures = data["procedures"];
   for (auto const& procedure : procedures)
