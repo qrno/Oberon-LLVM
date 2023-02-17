@@ -141,7 +141,7 @@ void create_IfElseIf(json statement){
   TheFunction->getBasicBlockList().insert(TheFunction->end(), ThenBB);
   TheFunction->getBasicBlockList().insert(TheFunction->end(), ElseBB);
 
-  auto CondV = GenExpression(statement["condition"]);
+  auto CondV = generate_expression(statement["condition"]);
   Builder->CreateCondBr(CondV, ThenBB, ElseBB);
 
   Builder->SetInsertPoint(ThenBB);
@@ -165,13 +165,15 @@ void create_ElseIf(json statement){
   TheFunction->getBasicBlockList().insert(TheFunction->end(), ThenBB);
   TheFunction->getBasicBlockList().insert(TheFunction->end(), ElseBB);
 
-  auto CondV = GenExpression(statement["condition"]);
+  auto CondV = generate_expression(statement["condition"]);
   Builder->CreateCondBr(CondV, ThenBB, ElseBB);
 
   Builder->SetInsertPoint(ThenBB);
   generate_statement(statement["thenStmt"]);
   std::cout<<"Them Stmt: "<<statement["thenStmt"]<<"\n";
   Builder->SetInsertPoint(ElseBB);
+}
+
 void create_Write(json statement) {
   std::cout << "Now creating WriteStmt" << std::endl;
 
@@ -205,7 +207,7 @@ void generate_statement(json statement) {
   }else if (type=="ForStmt"){
     // for
   }else if (type == "ReturnStmt") {
-    create_ReturnStmt(statement);
+    create_Return(statement);
   } else if (type == "SequenceStmt") {
     for (auto const& st : statement["stmts"])
       generate_statement(st);
