@@ -158,6 +158,7 @@ void create_ElseIf(json statement){
   Builder->SetInsertPoint(ElseBB);
 }
 
+
 void generate_statement(json statement) {
   auto type = statement["type"];
   std::cout << "Should generate statement of type " << type << std::endl;
@@ -167,6 +168,8 @@ void generate_statement(json statement) {
     create_IfElseIf(statement);
   }else if (type=="ElseIfStmt"){
     create_ElseIf(statement);
+  }else if (type=="ForStmt"){
+    c
   }else if (type == "ReturnStmt") {
     create_ReturnStmt(statement);
   } else if (type == "SequenceStmt") {
