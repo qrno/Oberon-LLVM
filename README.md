@@ -1,6 +1,8 @@
 # Oberon-LLVM
 
-## LLVM Installation
+## Resources
+
+The following tutorial was very useful in the development of the project: [My First Language Frontend with LLVM Tutorial](https://llvm.org/docs/tutorial/MyFirstLanguageFrontend/index.html)
 
 ## Missing Features
 
