@@ -25,7 +25,7 @@ static std::unique_ptr<IRBuilder<>> Builder;
 static std::map<std::string, AllocaInst*> NamedValues;
 
 static void InitializeModule() {
-  std::cout << "Initializing Module..." << std::endl;
+  std::cout << "Initializing Module:\nCreating LLVMContext, Module and IRBuilder" << std::endl;
 
   TheContext = std::make_unique<LLVMContext>();
   TheModule = std::make_unique<Module>("Oberon is Cool B)", *TheContext);
@@ -56,11 +56,11 @@ Value* generate_expression(json exp) {
   } else if (type =="OrExpression"){
     auto L = generate_expression(exp["left"]);
     auto R = generate_expression(exp["right"]);
-    return Builder->CreateLogicalOr(L, R, "OR");
+    return Builder->CreateLogicalOr(L, R, "orlogico");
   } else if (type=="AndExpression"){
     auto L = generate_expression(exp["left"]);
     auto R = generate_expression(exp["right"]);
-    return Builder->CreateLogicalAnd(L, R, "AND");
+    return Builder->CreateLogicalAnd(L, R, "andlogico");
   } else if (type=="EQExpression"){
     auto L = generate_expression(exp["left"]);
     auto R = generate_expression(exp["right"]);
@@ -89,11 +89,10 @@ Value* generate_expression(json exp) {
     std::vector<Value*> args;
     for (auto const& arg : exp["args"])
       args.push_back(generate_expression(arg));
-    std::cout << "Will now call CreateCall" << std::endl;
     return Builder->CreateCall(TheModule->getFunction((std::string)exp["name"]), args);
   }
 
-  std::cout << "Expression type not implemented!!!" << std::endl;
+  std::cout << "Expression of type " << type << " cannot be handled." << std::endl;
   exit(1);
   return nullptr;
 }
@@ -103,7 +102,7 @@ void generate_statement(json statement);
 void create_IfElse(json statement){
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
 
-  BasicBlock *ThenBB = BasicBlock::Create(*TheContext, "entao_IffElse", TheFunction);
+  BasicBlock *ThenBB = BasicBlock::Create(*TheContext, "entao_IfElse", TheFunction);
   BasicBlock *ElseBB = BasicBlock::Create(*TheContext, "senao_IfElse");
   TheFunction->getBasicBlockList().insert(TheFunction->end(), ThenBB);
   TheFunction->getBasicBlockList().insert(TheFunction->end(), ElseBB);
@@ -117,13 +116,6 @@ void create_IfElse(json statement){
   Builder->SetInsertPoint(ElseBB);
   generate_statement(statement["elseStmt"]);
 }
-
-void create_Return(json statement) {
-  auto return_expression = statement["exp"];
-  auto Ret = generate_expression(return_expression);
-  Builder->CreateRet(Ret);
-}
-
 
 void create_IfElseIf(json statement){
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
@@ -142,9 +134,8 @@ void create_IfElseIf(json statement){
 
   Builder->SetInsertPoint(ElseBB);
   auto const& elsifs = statement["elseifStmt"];
-  for (auto const& elsif : elsifs){
+  for (auto const& elsif : elsifs)
     generate_statement(elsif);
-  }
 
   generate_statement(statement["elseStmt"]);
 }
@@ -162,34 +153,33 @@ void create_ElseIf(json statement){
 
   Builder->SetInsertPoint(ThenBB);
   generate_statement(statement["thenStmt"]);
-  std::cout<<"Them Stmt: "<<statement["thenStmt"]<<"\n";
   Builder->SetInsertPoint(ElseBB);
 }
 
-void create_Write(json statement) {
-  std::cout << "Now creating WriteStmt" << std::endl;
+void create_Return(json statement) {
+  auto return_expression = statement["exp"];
+  auto Ret = generate_expression(return_expression);
+  Builder->CreateRet(Ret);
+}
 
+void create_Write(json statement) {
   auto exp = statement["expression"];
   auto value = generate_expression(exp);
-  std::cout << "Got value!" << std::endl;
 
   std::vector<Value*> args;
   args.push_back(value);
-  std::cout << "Pushed argument" << std::endl;
 
   auto F = TheModule->getFunction("write_integer");
   Builder->CreateCall(F, args);
 }
 
 void create_Read(json statement) {
-  std::cout << "Now creating ReadStmt" << std::endl;
-
   std::vector<Value*> args;
 
   auto F = TheModule->getFunction("read_integer");
   Value* value_read = Builder->CreateCall(F, args);
 
-  AllocaInst* alloca = NamedValues[statement["varName"]];
+  Value* alloca = NamedValues[statement["varName"]];
   Builder->CreateStore(value_read, alloca);
 }
 
@@ -211,10 +201,9 @@ void create_For(json statement) {
   Builder->SetInsertPoint(AfterBB);
 }
 
-
 void generate_statement(json statement) {
   auto type = statement["type"];
-  std::cout << "Should generate statement of type " << type << std::endl;
+  std::cout << "Generating statement of type " << type << std::endl;
   if (type == "IfElseStmt") {
     create_IfElse(statement);
   } else if (type=="IfElseIfStmt"){
@@ -235,17 +224,22 @@ void generate_statement(json statement) {
   } else if (type == "AssignmentStmt") {
     std::string varName = statement["designator"]["varName"];
     auto exp = generate_expression(statement["exp"]);
-    auto alloca = NamedValues[varName];
+    Value* alloca = NamedValues[varName];
     Builder->CreateStore(exp, alloca);
   } else if (type == "ProcedureCallStmt") {
     std::vector<Value*> args;
     for (auto const& arg : statement["args"])
       args.push_back(generate_expression(arg));
-    std::cout << "Will now call CreateCall" << std::endl;
     Builder->CreateCall(TheModule->getFunction((std::string)statement["name"]), args);
   } else {
     std::cout << "Statement of type " << type << " not implemented" << std::endl;
+    exit(1);
   }
+}
+
+AllocaInst* CreateAllocation(Function *f, std::string name) {
+  IRBuilder<> tmp_builder(&f->getEntryBlock(), f->getEntryBlock().begin());
+  return tmp_builder.CreateAlloca(Type::getInt32Ty(*TheContext), 0, name.c_str());
 }
 
 Type* str_to_llvm_type(std::string const& type) {
@@ -253,12 +247,6 @@ Type* str_to_llvm_type(std::string const& type) {
     return Type::getInt32Ty(*TheContext);
   std::cout << "Type not implemented " << type << std::endl;
   return nullptr;
-}
-
-AllocaInst* CreateAllocation(Function *f, std::string name) {
-  IRBuilder<> tmp_builder(&f->getEntryBlock(), f->getEntryBlock().begin());
-  std::cout << "After creating Builder" << std::endl;
-  return tmp_builder.CreateAlloca(Type::getInt32Ty(*TheContext), 0, name.c_str());
 }
 
 void generate_procedure(json procedure) {
@@ -271,8 +259,6 @@ void generate_procedure(json procedure) {
   FunctionType *FT = FunctionType::get(return_type, arg_types, false);
   Function *F = Function::Create(FT, Function::ExternalLinkage, (std::string)procedure["name"], TheModule.get());
 
-  std::cout << "After creating function prototype!" << std::endl;
-
   std::vector<std::string> arg_names;
   for (auto const& arg : procedure["args"])
     arg_names.push_back(arg["name"]);
@@ -281,21 +267,15 @@ void generate_procedure(json procedure) {
   for (auto &Arg : F->args())
     Arg.setName(arg_names[idx++]);
 
-  std::cout << "After setting variable names!" << std::endl;
-
   BasicBlock *BB = BasicBlock::Create(*TheContext, "entry", F);
   Builder->SetInsertPoint(BB);
 
   NamedValues.clear();
   for (auto &Arg : F->args()) {
-    std::cout << "Dealing with argument " << (std::string)Arg.getName() << std::endl;
     AllocaInst *alloca = CreateAllocation(F, (std::string)Arg.getName());
-    std::cout << "After creating allocation!" << std::endl;
     Builder->CreateStore(&Arg, alloca);
     NamedValues[(std::string)Arg.getName()] = alloca;
   }
-
-  std::cout << "After setting named values!" << std::endl;
 
   auto function_stmt = procedure["stmt"];
   generate_statement(function_stmt);
@@ -309,8 +289,8 @@ void generate_procedure(json procedure) {
   F->print(errs());
 }
 
-// declare write_something
 void declare_write_integer() {
+  std::cout << "Declaring write_integer procedure" << std::endl;
   std::vector<Type*> arg_types{Type::getInt32Ty(*TheContext)};
   FunctionType* func_type = FunctionType::get(Type::getVoidTy(*TheContext), arg_types, false);
   auto func = Function::Create(func_type, Function::ExternalLinkage, "write_integer", *TheModule);
@@ -318,6 +298,7 @@ void declare_write_integer() {
 }
 
 void declare_read_integer() {
+  std::cout << "Declaring read_integer procedure" << std::endl;
   std::vector<Type*> arg_types{};
   FunctionType* func_type = FunctionType::get(Type::getInt32Ty(*TheContext), arg_types, false);
   auto func = Function::Create(func_type, Function::ExternalLinkage, "read_integer", *TheModule);
@@ -330,13 +311,8 @@ int main() {
   declare_write_integer();
   declare_read_integer();
 
-  std::ifstream f{"for.json"};
+  std::ifstream f{"code.json"};
   json data = json::parse(f);
-
-  // TODO: Global variables
-  /* auto const& variables = data["variables"]; */
-  /* for (auto const& variable : variables) { */
-  /* } */
 
   auto const& procedures = data["procedures"];
   for (auto const& procedure : procedures)
@@ -349,4 +325,13 @@ int main() {
   generate_procedure(main_function);
 
   TheModule->print(errs(), nullptr);
+
+  std::string generated_code;
+  raw_string_ostream OS(generated_code);
+  OS << *TheModule;
+  OS.flush();
+
+  std::ofstream o{"code.ll"};
+  o << generated_code;
+  o.close();
 }
