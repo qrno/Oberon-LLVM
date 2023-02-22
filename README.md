@@ -22,6 +22,8 @@
 java -jar oberon.jar -i code.oberon -o code.json -b json
 ```
 
+The oberon.jar file is obtained by compiling the Oberon-Scala project
+
 - Run the "main" executable to generate the "code.ll" file.
 
 - Run the genexec.sh to generate the "app" executable.
